@@ -36,6 +36,21 @@ unsigned long ticks = 0;
  */
 uint8_t fiber_flags = 0;
 
+
+/*
+ * Fibers may perform wait/notify semantics on events. If set, these operations will be permitted on this MicroBitMessageBus.
+ */
+MicroBitMessageBus *messageBus = NULL;
+
+// Array of components which are iterated during a system tick
+static MicroBitComponent* systemTickComponents[MICROBIT_SYSTEM_COMPONENTS];
+
+// Array of components which are iterated during idle thread execution, isIdleCallbackNeeded is polled during a systemTick.
+static MicroBitComponent* idleThreadComponents[MICROBIT_IDLE_COMPONENTS];
+
+// Periodic callback interrupt
+static Ticker fiberSchedulerTicker;
+
 /**
   * Utility function to add the currenty running fiber to the given queue. 
   * Perform a simple add at the head, to avoid complexity,
@@ -148,8 +163,12 @@ Fiber *getFiberContext()
   *
   * This function must be called once only from the main thread, and before any other Fiber operation.
   */
-void scheduler_init()
+void scheduler_init(MicroBitMessageBus *_messageBus)
 {
+	// Store a reference to the messageBus provided.
+	// This parameter will be NULL if we're being run without a message bus.
+	messageBus = _messageBus;
+
     // Create a new fiber context
     currentFiber = getFiberContext();
     
@@ -162,12 +181,30 @@ void scheduler_init()
     idleFiber->tcb.SP = CORTEX_M0_STACK_BASE - 0x04;    
     idleFiber->tcb.LR = (uint32_t) &idle_task;
 
-    // Register to receive events in the NOTIFY channel - this is used to implement wait-notify semantics
-    uBit.MessageBus.listen(MICROBIT_ID_NOTIFY, MICROBIT_EVT_ANY, scheduler_event, MESSAGE_BUS_LISTENER_IMMEDIATE);
-    uBit.MessageBus.listen(MICROBIT_ID_NOTIFY_ONE, MICROBIT_EVT_ANY, scheduler_event, MESSAGE_BUS_LISTENER_IMMEDIATE);
+	if (messageBus)
+	{
+		// Register to receive events in the NOTIFY channel - this is used to implement wait-notify semantics
+		messageBus->listen(MICROBIT_ID_NOTIFY, MICROBIT_EVT_ANY, scheduler_event, MESSAGE_BUS_LISTENER_IMMEDIATE);
+		messageBus->listen(MICROBIT_ID_NOTIFY_ONE, MICROBIT_EVT_ANY, scheduler_event, MESSAGE_BUS_LISTENER_IMMEDIATE);
+	}
 
-    // Flag that we now have a scheduler running
-    uBit.flags |= MICROBIT_FLAG_SCHEDULER_RUNNING;
+	// register a period callback to drive the scheduler and any other registered components.
+    fiberSchedulerTicker.attach(scheduler_tick, ((float)FIBER_TICK_PERIOD_MS / (float)1000));     
+
+	fiber_flags |= MICROBIT_SCHEDULER_RUNNING;
+}
+
+
+/**
+  * Determines if the fiber scheduler is operational.
+  * @return 1 if the fber scheduler is running, 0 otherwise.
+  */
+int fiber_scheduler_running()
+{
+	if (fiber_flags & MICROBIT_SCHEDULER_RUNNING)
+		return 1;
+
+	return 0;
 }
 
 /**
@@ -197,18 +234,31 @@ void scheduler_tick()
         
         f = t;
     }
+
+    // Update any components registered for a callback
+    for(int i = 0; i < MICROBIT_SYSTEM_COMPONENTS; i++)
+        if(systemTickComponents[i] != NULL)
+            systemTickComponents[i]->systemTick();
 }
 
 /**
   * Event callback. Called from the message bus whenever an event is raised. 
   * Checks to determine if any fibers blocked on the wait queue need to be woken up 
   * and made runnable due to the event.
+  * @param evt The event to be processed.
+  * @return MICROBIT_OK, or MICROBIT_NOT_SUPPORTED if the fiber scheduler is not associated with a MicroBitMessageBus.
   */
 void scheduler_event(MicroBitEvent evt)
 {
     Fiber *f = waitQueue;
     Fiber *t;
     int notifyOneComplete = 0;
+
+	// This should never happen. 
+	// It is however, safe to simply ignore any events provided, ans if no messageBus if recorded,
+	// no fibers are permitted to block on events.
+	if (messageBus == NULL)
+		return;
     
     // Check the wait queue, and wake up any fibers as necessary.
     while (f != NULL)
@@ -244,7 +294,7 @@ void scheduler_event(MicroBitEvent evt)
 
     // Unregister this event, as we've woken up all the fibers with this match.
     if (evt.source != MICROBIT_ID_NOTIFY && evt.source != MICROBIT_ID_NOTIFY_ONE)
-        uBit.MessageBus.ignore(evt.source, evt.value, scheduler_event);
+        messageBus->ignore(evt.source, evt.value, scheduler_event);
 }
 
 
@@ -291,7 +341,7 @@ void fiber_sleep(unsigned long t)
 
 /**
   * Blocks the calling thread until the specified event is raised.
-  * The calling thread will be immediatley descheduled, and placed onto a 
+  * The calling thread will be immediately descheduled, and placed onto a 
   * wait queue until the requested event is received.
   * 
   * n.b. the fiber will not be be made runnable until after the event is raised, but there
@@ -299,10 +349,14 @@ void fiber_sleep(unsigned long t)
   *
   * @param id The ID field of the event to listen for (e.g. MICROBIT_ID_BUTTON_A)
   * @param value The VALUE of the event to listen for (e.g. MICROBIT_BUTTON_EVT_CLICK)
+  * @return MICROBIT_OK, or MICROBIT_NOT_SUPPORTED if the fiber scheduler is not associated with a MicroBitMessageBus.
   */
-void fiber_wait_for_event(uint16_t id, uint16_t value)
+int fiber_wait_for_event(uint16_t id, uint16_t value)
 {
     Fiber *f = currentFiber;
+
+	if (messageBus == NULL)
+		return MICROBIT_NOT_SUPPORTED;
 
     // Sleep is a blocking call, so if we'r ein a fork on block context,
     // it's time to spawn a new fiber...
@@ -330,10 +384,12 @@ void fiber_wait_for_event(uint16_t id, uint16_t value)
     // Register to receive this event, so we can wake up the fiber when it happens.
     // Special case for teh notify channel, as we always stay registered for that.
     if (id != MICROBIT_ID_NOTIFY && id != MICROBIT_ID_NOTIFY_ONE)
-        uBit.MessageBus.listen(id, value, scheduler_event, MESSAGE_BUS_LISTENER_IMMEDIATE);
+        messageBus->listen(id, value, scheduler_event, MESSAGE_BUS_LISTENER_IMMEDIATE);
 
     // Finally, enter the scheduler.
     schedule();
+
+	return MICROBIT_OK;
 }
 
 /**
@@ -645,7 +701,7 @@ void schedule()
 
     // We're in a normal scheduling context, so perform a round robin algorithm across runnable fibers.
     // OK - if we've nothing to do, then run the IDLE task (power saving sleep)
-    if (runQueue == NULL || fiber_flags & MICROBIT_FLAG_DATA_READY)
+    if (runQueue == NULL)
         currentFiber = idleFiber;
 
     else if (currentFiber->queue == &runQueue)
@@ -669,7 +725,7 @@ void schedule()
         {
             idle();
         }
-        while (runQueue == NULL || fiber_flags & MICROBIT_FLAG_DATA_READY);
+        while (runQueue == NULL);
 
         // Switch to a non-idle fiber.
         // If this fiber is the same as the old one then there'll be no switching at all.
@@ -705,22 +761,104 @@ void schedule()
 
 
 /**
+  * Add a component to to the collection of those invoked when the scheduler's periodic timer is triggered.
+  * The given component is called on each interrupt, within interrupt context.
+  *
+  * @param component The component to add.
+  * @return MICROBIT_OK on success. MICROBIT_NO_RESOURCES is returned if further components cannot be supported.
+  * @note this will be converted into a dynamic list of components
+  */
+int fiber_add_system_component(MicroBitComponent *component)
+{
+    int i = 0;
+    
+    while(systemTickComponents[i] != NULL && i < MICROBIT_SYSTEM_COMPONENTS)  
+        i++;
+    
+    if(i == MICROBIT_SYSTEM_COMPONENTS)
+        return MICROBIT_NO_RESOURCES;
+        
+    systemTickComponents[i] = component;    
+    return MICROBIT_OK;
+}
+
+/**
+  * remove a component from the array of components
+  * @param component The component to remove.
+  * @return MICROBIT_OK on success. MICROBIT_INVALID_PARAMTER is returned if the given component has not been previous added.
+  * @note this will be converted into a dynamic list of components
+  */
+int fiber_remove_system_component(MicroBitComponent *component)
+{
+    int i = 0;
+    
+    while(systemTickComponents[i] != component  && i < MICROBIT_SYSTEM_COMPONENTS)  
+        i++;
+    
+    if(i == MICROBIT_SYSTEM_COMPONENTS)
+        return MICROBIT_INVALID_PARAMETER;
+
+    systemTickComponents[i] = NULL;
+
+    return MICROBIT_OK;
+}
+
+/**
+  * add a component to the array of components which invocate the systemTick member function during a systemTick 
+  * @param component The component to add.
+  * @return MICROBIT_OK on success. MICROBIT_NO_RESOURCES is returned if further components cannot be supported.
+  * @note this will be converted into a dynamic list of components
+  */
+int fiber_add_idle_component(MicroBitComponent *component)
+{
+    int i = 0;
+    
+    while(idleThreadComponents[i] != NULL && i < MICROBIT_IDLE_COMPONENTS)  
+        i++;
+    
+    if(i == MICROBIT_IDLE_COMPONENTS)
+        return MICROBIT_NO_RESOURCES;
+        
+    idleThreadComponents[i] = component;    
+
+    return MICROBIT_OK;
+}
+
+/**
+  * remove a component from the array of components
+  * @param component The component to remove.
+  * @return MICROBIT_OK on success. MICROBIT_INVALID_PARAMTER is returned if the given component has not been previous added.
+  * @note this will be converted into a dynamic list of components
+  */
+int fiber_remove_idle_component(MicroBitComponent *component)
+{
+    int i = 0;
+    
+    while(idleThreadComponents[i] != component && i < MICROBIT_IDLE_COMPONENTS)  
+        i++;
+    
+    if(i == MICROBIT_IDLE_COMPONENTS)
+        return MICROBIT_INVALID_PARAMETER;
+
+    idleThreadComponents[i] = NULL;
+
+    return MICROBIT_OK;
+}
+
+/**
   * Set of tasks to perform when idle.
   * Service any background tasks that are required, and attmept power efficient sleep.
   */
 void idle()
 {
     // Service background tasks
-    uBit.systemTasks();
-
+    for(int i = 0; i < MICROBIT_IDLE_COMPONENTS; i++)
+        if(idleThreadComponents[i] != NULL)
+            idleThreadComponents[i]->idleTick();
+    
     // If the above did create any useful work, enter power efficient sleep.
     if(scheduler_runqueue_empty())
-    {
-        if (uBit.ble)
-            uBit.ble->waitForEvent();
-        else
-            __WFI();
-    }
+    	__WFI();
 }
 /**
   * IDLE task.

@@ -1,12 +1,5 @@
 #include "MicroBit.h"
 
-/**
-  * custom function for panic for malloc & new due to scoping issue.
-  */
-void panic(int statusCode)
-{
-    uBit.panic(statusCode);   
-}
 
 /**
   * Perform a hard reset of the micro:bit.
@@ -38,16 +31,16 @@ microbit_reset()
   * @endcode
   */
 MicroBit::MicroBit() : 
-    flags(0x00),
+	resetButton(MICROBIT_PIN_BUTTON_RESET),
     i2c(MICROBIT_PIN_SDA, MICROBIT_PIN_SCL),
     serial(USBTX, USBRX),
-    MessageBus(),
+    messageBus(),
     display(MICROBIT_ID_DISPLAY, MICROBIT_DISPLAY_WIDTH, MICROBIT_DISPLAY_HEIGHT),
     buttonA(MICROBIT_ID_BUTTON_A,MICROBIT_PIN_BUTTON_A, MICROBIT_BUTTON_SIMPLE_EVENTS),
     buttonB(MICROBIT_ID_BUTTON_B,MICROBIT_PIN_BUTTON_B, MICROBIT_BUTTON_SIMPLE_EVENTS),
-    buttonAB(MICROBIT_ID_BUTTON_AB,MICROBIT_ID_BUTTON_A,MICROBIT_ID_BUTTON_B), 
-    accelerometer(MICROBIT_ID_ACCELEROMETER, MMA8653_DEFAULT_ADDR),
-    compass(MICROBIT_ID_COMPASS, MAG3110_DEFAULT_ADDR),
+    buttonAB(MICROBIT_ID_BUTTON_AB,MICROBIT_ID_BUTTON_A,MICROBIT_ID_BUTTON_B, messageBus), 
+    accelerometer(MICROBIT_ID_ACCELEROMETER, MMA8653_DEFAULT_ADDR, i2c),
+    compass(MICROBIT_ID_COMPASS, MAG3110_DEFAULT_ADDR,i2c),
     thermometer(MICROBIT_ID_THERMOMETER),
     io(MICROBIT_ID_IO_P0,MICROBIT_ID_IO_P1,MICROBIT_ID_IO_P2,
        MICROBIT_ID_IO_P3,MICROBIT_ID_IO_P4,MICROBIT_ID_IO_P5,
@@ -58,6 +51,9 @@ MicroBit::MicroBit() :
        MICROBIT_ID_IO_P20),
 	bleManager()
 {   
+	// Bring up soft reset functionality as soona s possible.
+    resetButton.mode(PullUp);
+    resetButton.fall(microbit_reset);
 }
 
 /**
@@ -73,16 +69,22 @@ MicroBit::MicroBit() :
   */
 void MicroBit::init()
 {   
-    // Set the default baud rate for the serial port.`
-    uBit.serial.baud(115200);
-        
+    // Bring up our nested heap allocator.
+    microbit_heap_init();
+
+    // Bring up fiber scheduler
+    scheduler_init(&messageBus);
+    sleep(10);
+
+	// TODO: YUCK!!! MOVE THESE INTO THE RELEVANT COMPONENTS!!
+	
     //add the display to the systemComponent array
-    addSystemComponent(&uBit.display);
+    addSystemComponent(&display);
     
     //add the compass and accelerometer to the idle array
-    addIdleComponent(&uBit.accelerometer);
-    addIdleComponent(&uBit.compass);
-    addIdleComponent(&uBit.MessageBus);
+    addIdleComponent(&accelerometer);
+    addIdleComponent(&compass);
+    addIdleComponent(&messageBus);
 
     // Seed our random number generator
     seedRandom();
@@ -90,11 +92,67 @@ void MicroBit::init()
 #if CONFIG_ENABLED(MICROBIT_BLE_ENABLED)
     // Start the BLE stack.        
     bleManager.init(this->getName(), this->getSerial());
-    ble = bleManager.ble;
+
+    // Now, bring up any configured auxiliary services...
+	
+#if CONFIG_ENABLED(MICROBIT_BLE_DFU_SERVICE)
+    new MicroBitDFUService(*bleManager.ble);
 #endif
 
-    // Start refreshing the Matrix Display
-    systemTicker.attach(this, &MicroBit::systemTick, MICROBIT_DISPLAY_REFRESH_PERIOD);     
+#if CONFIG_ENABLED(MICROBIT_BLE_DEVICE_INFORMATION_SERVICE)
+    DeviceInformationService ble_device_information_service (*bleManager.ble, MICROBIT_BLE_MANUFACTURER, MICROBIT_BLE_MODEL, getSerial().toCharArray(), MICROBIT_BLE_HARDWARE_VERSION, systemVersion(), NULL);
+#endif
+
+#if CONFIG_ENABLED(MICROBIT_BLE_EVENT_SERVICE)
+    new MicroBitEventService(*ble);
+#endif    
+    
+#if CONFIG_ENABLED(MICROBIT_BLE_LED_SERVICE) 
+    new MicroBitLEDService(*ble);
+#endif
+
+#if CONFIG_ENABLED(MICROBIT_BLE_ACCELEROMETER_SERVICE) 
+    new MicroBitAccelerometerService(*ble);
+#endif
+
+#if CONFIG_ENABLED(MICROBIT_BLE_MAGNETOMETER_SERVICE) 
+    new MicroBitMagnetometerService(*ble);
+#endif
+
+#if CONFIG_ENABLED(MICROBIT_BLE_BUTTON_SERVICE) 
+    new MicroBitButtonService(*ble);
+#endif
+
+#if CONFIG_ENABLED(MICROBIT_BLE_IO_PIN_SERVICE) 
+    new MicroBitIOPinService(*ble);
+#endif
+
+#if CONFIG_ENABLED(MICROBIT_BLE_TEMPERATURE_SERVICE) 
+    new MicroBitTemperatureService(*ble, thermometer, MessageBus);
+#endif
+
+#endif
+
+#if CONFIG_ENABLED(MICROBIT_BLE_BLUEZONE)
+    // Test if we need to enter BLE pairing mode...
+    int i=0;
+
+    while (buttonA.isPressed() && buttonB.isPressed() && i<10)
+    {
+        sleep(100);
+        i++;
+        
+        if (i == 10)
+        {
+			// Bring up the BLE stack if it isn't alredy done.
+			if (!bleManager.ble)
+				bleManager.init(getName(), getSerial());
+
+            // Enter BLUE ZONE mode, using the LED matrix for any necessary paiing operations
+			bleManager.bluezone(display);
+        }
+    }
+#endif
 }
 
 /**
@@ -190,7 +248,7 @@ int MicroBit::sleep(int milliseconds)
     if(milliseconds < 0)
         return MICROBIT_INVALID_PARAMETER;
         
-    if (flags & MICROBIT_FLAG_SCHEDULER_RUNNING)
+    if (fiber_scheduler_running())
         fiber_sleep(milliseconds);
     else
         wait_ms(milliseconds);
@@ -219,7 +277,6 @@ int MicroBit::sleep(int milliseconds)
   */
 int MicroBit::random(int max)
 {
-    //return MICROBIT_INVALID_VALUE if max is <= 0...
     if(max <= 0)
         return MICROBIT_INVALID_PARAMETER;
     
@@ -264,42 +321,6 @@ void MicroBit::seedRandom()
 
 
 /**
-  * Periodic callback. Used by MicroBitDisplay, FiberScheduler and buttons.
-  */
-void MicroBit::systemTick()
-{   
-    // Scheduler callback. We do this here just as a single timer is more efficient. :-)
-    if (uBit.flags & MICROBIT_FLAG_SCHEDULER_RUNNING)
-        scheduler_tick();  
-    
-    //work out if any idle components need processing, if so prioritise the idle thread
-    for(int i = 0; i < MICROBIT_IDLE_COMPONENTS; i++)
-        if(idleThreadComponents[i] != NULL && idleThreadComponents[i]->isIdleCallbackNeeded())
-        {
-            fiber_flags |= MICROBIT_FLAG_DATA_READY;
-            break;
-        }
-        
-    //update any components in the systemComponents array
-    for(int i = 0; i < MICROBIT_SYSTEM_COMPONENTS; i++)
-        if(systemTickComponents[i] != NULL)
-            systemTickComponents[i]->systemTick();
-}
-
-/**
-  * System tasks to be executed by the idle thread when the Micro:Bit isn't busy or when data needs to be read.
-  */
-void MicroBit::systemTasks()
-{   
-    //call the idleTick member function indiscriminately 
-    for(int i = 0; i < MICROBIT_IDLE_COMPONENTS; i++)
-        if(idleThreadComponents[i] != NULL)
-            idleThreadComponents[i]->idleTick();
-    
-    fiber_flags &= ~MICROBIT_FLAG_DATA_READY;
-}
-
-/**
   * add a component to the array of components which invocate the systemTick member function during a systemTick 
   * @param component The component to add.
   * @return MICROBIT_OK on success. MICROBIT_NO_RESOURCES is returned if further components cannot be supported.
@@ -307,16 +328,7 @@ void MicroBit::systemTasks()
   */
 int MicroBit::addSystemComponent(MicroBitComponent *component)
 {
-    int i = 0;
-    
-    while(systemTickComponents[i] != NULL && i < MICROBIT_SYSTEM_COMPONENTS)  
-        i++;
-    
-    if(i == MICROBIT_SYSTEM_COMPONENTS)
-        return MICROBIT_NO_RESOURCES;
-        
-    systemTickComponents[i] = component;    
-    return MICROBIT_OK;
+	return fiber_add_system_component(component);
 }
 
 /**
@@ -327,17 +339,7 @@ int MicroBit::addSystemComponent(MicroBitComponent *component)
   */
 int MicroBit::removeSystemComponent(MicroBitComponent *component)
 {
-    int i = 0;
-    
-    while(systemTickComponents[i] != component  && i < MICROBIT_SYSTEM_COMPONENTS)  
-        i++;
-    
-    if(i == MICROBIT_SYSTEM_COMPONENTS)
-        return MICROBIT_INVALID_PARAMETER;
-
-    systemTickComponents[i] = NULL;
-
-    return MICROBIT_OK;
+	return fiber_remove_system_component(component);
 }
 
 /**
@@ -348,17 +350,7 @@ int MicroBit::removeSystemComponent(MicroBitComponent *component)
   */
 int MicroBit::addIdleComponent(MicroBitComponent *component)
 {
-    int i = 0;
-    
-    while(idleThreadComponents[i] != NULL && i < MICROBIT_IDLE_COMPONENTS)  
-        i++;
-    
-    if(i == MICROBIT_IDLE_COMPONENTS)
-        return MICROBIT_NO_RESOURCES;
-        
-    idleThreadComponents[i] = component;    
-
-    return MICROBIT_OK;
+	return fiber_add_idle_component(component);
 }
 
 /**
@@ -369,17 +361,7 @@ int MicroBit::addIdleComponent(MicroBitComponent *component)
   */
 int MicroBit::removeIdleComponent(MicroBitComponent *component)
 {
-    int i = 0;
-    
-    while(idleThreadComponents[i] != component && i < MICROBIT_IDLE_COMPONENTS)  
-        i++;
-    
-    if(i == MICROBIT_IDLE_COMPONENTS)
-        return MICROBIT_INVALID_PARAMETER;
-
-    idleThreadComponents[i] = NULL;
-
-    return MICROBIT_OK;
+	return fiber_remove_idle_component(component);
 }
 
 /**
@@ -406,13 +388,12 @@ const char *MicroBit::systemVersion()
 }
 
 /**
-  * Triggers a microbit panic where an infinite loop will occur swapping between the panicFace and statusCode if provided.
-  * 
+  * Triggers a microbit panic. All functionality wil cease, and a sad face displayed along with an error code. 
   * @param statusCode the status code of the associated error. Status codes must be in the range 0-255.
   */
 void MicroBit::panic(int statusCode)
 {
     //show error and enter infinite while
-    uBit.display.error(statusCode);
+	display.error(statusCode);
 }
 

@@ -48,11 +48,8 @@ void MicroBitDFUService::onDataWritten(const GattWriteCallbackParams *params)
     {
         if(params->len > 0 && params->data[0] == MICROBIT_DFU_OPCODE_START_DFU)
 		{
-        	uBit.display.stopAnimation();
-            uBit.display.clear();
-
 #if CONFIG_ENABLED(MICROBIT_DBG)
-            uBit.serial.printf("  ACTIVATING BOOTLOADER.\n");
+            printf("  ACTIVATING BOOTLOADER.\n");
 #endif
             bootloader_start();    
 		}

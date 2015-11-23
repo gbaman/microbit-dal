@@ -1,11 +1,5 @@
 #include "MicroBit.h"
 
-void
-onMultiButtonEvent(MicroBitEvent evt)
-{   
-    uBit.buttonAB.onEvent(evt);
-}
-
 /**
   * Constructor. 
   * Create a representation of a virtual button, that generates events based upon the combination
@@ -29,14 +23,14 @@ onMultiButtonEvent(MicroBitEvent evt)
   * MICROBIT_BUTTON_EVT_HOLD
   * @endcode
   */  
-MicroBitMultiButton::MicroBitMultiButton(uint16_t id, uint16_t button1, uint16_t button2)
+MicroBitMultiButton::MicroBitMultiButton(uint16_t id, uint16_t button1, uint16_t button2, MicroBitMessageBus &messageBus)
 {
     this->id = id;
     this->button1 = button1;
     this->button2 = button2;
     
-    uBit.MessageBus.listen(button1, MICROBIT_EVT_ANY, onMultiButtonEvent,  MESSAGE_BUS_LISTENER_IMMEDIATE);
-    uBit.MessageBus.listen(button2, MICROBIT_EVT_ANY, onMultiButtonEvent,  MESSAGE_BUS_LISTENER_IMMEDIATE);
+    messageBus.listen(button1, MICROBIT_EVT_ANY, this, &MicroBitMultiButton::onEvent,  MESSAGE_BUS_LISTENER_IMMEDIATE);
+    messageBus.listen(button2, MICROBIT_EVT_ANY, this, &MicroBitMultiButton::onEvent,  MESSAGE_BUS_LISTENER_IMMEDIATE);
 }
 
 uint16_t MicroBitMultiButton::otherSubButton(uint16_t b)
@@ -133,7 +127,6 @@ void MicroBitMultiButton::setSupressedState(uint16_t button, int value)
             status &= ~MICROBIT_MULTI_BUTTON_SUPRESSED_2;
     }
 }
-
 
 void MicroBitMultiButton::onEvent(MicroBitEvent evt)
 {

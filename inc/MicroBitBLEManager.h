@@ -69,7 +69,7 @@ class MicroBitBLEManager
       * uBit.init();
       * @endcode
       */
-    void init(ManagedString deviceName, ManagedString serialNumber);
+    void init(ManagedString deviceName);
 
     /**
      * Enter BLUEZONE mode. This is mode is called to initiate pairing, and to enable FOTA programming

@@ -81,6 +81,7 @@ class MicroBitAccelerometer : public MicroBitComponent
     uint8_t         sampleRange;   // The sample range of the accelerometer in g.
     MMA8653Sample   sample;        // The last sample read.
     DigitalIn       int1;          // Data ready interrupt.
+	MicroBitI2C&	i2c;		   // The I2C interface to use.
     
     public:
     
@@ -95,7 +96,7 @@ class MicroBitAccelerometer : public MicroBitComponent
       * accelerometer(MICROBIT_ID_ACCELEROMETER, MMA8653_DEFAULT_ADDR)
       * @endcode
       */
-    MicroBitAccelerometer(uint16_t id, uint16_t address);
+    MicroBitAccelerometer(uint16_t id, uint16_t address, MicroBitI2C &_i2c);
     
     /**
      * Configures the accelerometer for G range and sample rate defined

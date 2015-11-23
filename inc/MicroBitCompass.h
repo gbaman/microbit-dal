@@ -109,6 +109,7 @@ class MicroBitCompass : public MicroBitComponent
     CompassSample       average;        // Centre point of sample data.
     CompassSample       sample;         // The latest sample data recorded.
     DigitalIn           int1;           // Data ready interrupt.
+    MicroBitI2C&		i2c;           // I2C interface.
 
     public:
             
@@ -130,7 +131,7 @@ class MicroBitCompass : public MicroBitComponent
       * MICROBIT_COMPASS_EVT_CAL_END        // triggered when calibration has finished.
       * @endcode
       */
-    MicroBitCompass(uint16_t id, uint16_t address);
+    MicroBitCompass(uint16_t id, uint16_t address, MicroBitI2C& _i2c);
    
     /**
      * Configures the compass for the sample rate defined

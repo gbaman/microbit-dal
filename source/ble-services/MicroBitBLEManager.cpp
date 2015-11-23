@@ -3,11 +3,6 @@
 #define MICROBIT_BLE_ENABLE_BONDING 	true
 #define MICROBIT_BLE_REQUIRE_MITM		true
 
-const char* MICROBIT_BLE_MANUFACTURER = "The Cast of W1A";
-const char* MICROBIT_BLE_MODEL = "BBC micro:bit";
-const char* MICROBIT_BLE_HARDWARE_VERSION = "1.0";
-const char* MICROBIT_BLE_FIRMWARE_VERSION = MICROBIT_DAL_VERSION;
-const char* MICROBIT_BLE_SOFTWARE_VERSION = NULL;
 
 /*
  * Many of the mbed interfaces we need to use only support callbacks to plain C functions, rather than C++ methods.
@@ -81,10 +76,10 @@ void MicroBitBLEManager::onDisconnectionCallback()
   *
   * Example:
   * @code 
-  * uBit.init();
+  * bleManager.init("zevug");
   * @endcode
   */
-void MicroBitBLEManager::init(ManagedString deviceName, ManagedString serialNumber)
+void MicroBitBLEManager::init(ManagedString deviceName)
 {   
 	ManagedString prefix("BBC micro:bit [");
 	ManagedString postfix("]");
@@ -103,43 +98,6 @@ void MicroBitBLEManager::init(ManagedString deviceName, ManagedString serialNumb
     ble->securityManager().onPasskeyDisplay(passkeyDisplayCallback);
     ble->securityManager().onSecuritySetupCompleted(securitySetupCompletedCallback);
     ble->securityManager().init(MICROBIT_BLE_ENABLE_BONDING, MICROBIT_BLE_REQUIRE_MITM, SecurityManager::IO_CAPS_DISPLAY_ONLY);
-
-    // Bring up any configured auxiliary services.
-#if CONFIG_ENABLED(MICROBIT_BLE_DFU_SERVICE)
-    new MicroBitDFUService(*ble);
-#endif
-
-#if CONFIG_ENABLED(MICROBIT_BLE_DEVICE_INFORMATION_SERVICE)
-    DeviceInformationService ble_device_information_service (*ble, MICROBIT_BLE_MANUFACTURER, MICROBIT_BLE_MODEL, serialNumber.toCharArray(), MICROBIT_BLE_HARDWARE_VERSION, MICROBIT_BLE_FIRMWARE_VERSION, MICROBIT_BLE_SOFTWARE_VERSION);
-#endif
-
-#if CONFIG_ENABLED(MICROBIT_BLE_EVENT_SERVICE)
-    new MicroBitEventService(*ble);
-#endif    
-    
-#if CONFIG_ENABLED(MICROBIT_BLE_LED_SERVICE) 
-    new MicroBitLEDService(*ble);
-#endif
-
-#if CONFIG_ENABLED(MICROBIT_BLE_ACCELEROMETER_SERVICE) 
-    new MicroBitAccelerometerService(*ble);
-#endif
-
-#if CONFIG_ENABLED(MICROBIT_BLE_MAGNETOMETER_SERVICE) 
-    new MicroBitMagnetometerService(*ble);
-#endif
-
-#if CONFIG_ENABLED(MICROBIT_BLE_BUTTON_SERVICE) 
-    new MicroBitButtonService(*ble);
-#endif
-
-#if CONFIG_ENABLED(MICROBIT_BLE_IO_PIN_SERVICE) 
-    new MicroBitIOPinService(*ble);
-#endif
-
-#if CONFIG_ENABLED(MICROBIT_BLE_TEMPERATURE_SERVICE) 
-    new MicroBitTemperatureService(*ble);
-#endif
 
     // Configure for high speed mode where possible.
     Gap::ConnectionParams_t fast;
@@ -218,7 +176,7 @@ void MicroBitBLEManager::bluezone(MicroBitDisplay &display)
 			}
 		}
 
-		uBit.sleep(100);
+		MicroBit::sleep(100);
 	}
 }
 

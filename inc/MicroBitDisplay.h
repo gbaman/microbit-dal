@@ -106,7 +106,9 @@ class MicroBitDisplay : public MicroBitComponent
     uint8_t timingCount;
     Timeout renderTimer;
 
-    MicroBitFont font;
+	//
+	// Reference to the first display created. Used as a defaut output channel, such as panic().
+	static MicroBitDisplay *defaultDisplay;
 
     //
     // State used by all animation routines.
@@ -547,14 +549,28 @@ public:
      */
     void error(int statusCode);
 
+	/**
+	 * Displays "=(" and an accompanying status code on the default display.
+	 * @param statusCode the appropriate status code - 0 means no code will be displayed. Status codes must be in the range 0-255.
+	 *
+	 * Example:
+	 * @code 
+	 * uBit.display.error(20);
+	 * @endcode
+	 */
+	static void panic(int statusCode);
+
     /**
-      * Updates the font property of this object with the new font.
-      * @param font the new font that will be used to render characters..
+      * Updates the font that will be used for display operations.
+	  * DEPRECATED: Please use MicroBitFont::setSystemFont() instead. 
+	  *
+      * @param font the new font that will be used to render characters.
       */
     void setFont(MicroBitFont font);
 
     /**
       * Retreives the font object used for rendering characters on the display.
+	  * DEPRECATED: Please use MicroBitFont::getSystemFont() instead. 
       */
     MicroBitFont getFont();
     

@@ -9,6 +9,7 @@
 #include "nrf_gpio.h"
 
 const float timings[MICROBIT_DISPLAY_GREYSCALE_BIT_DEPTH] = {0.000010, 0.000047, 0.000094, 0.000187, 0.000375, 0.000750, 0.001500, 0.003000};
+MicroBitDisplay *MicroBitDisplay::defaultDisplay = NULL;
 
 /**
   * Constructor.
@@ -24,7 +25,6 @@ const float timings[MICROBIT_DISPLAY_GREYSCALE_BIT_DEPTH] = {0.000010, 0.000047,
   * @endcode
   */
 MicroBitDisplay::MicroBitDisplay(uint16_t id, uint8_t x, uint8_t y) : 
-    font(),
     image(x*2,y)
 {
     //set pins as output
@@ -43,8 +43,11 @@ MicroBitDisplay::MicroBitDisplay(uint16_t id, uint8_t x, uint8_t y) :
 
     this->mode = DISPLAY_MODE_BLACK_AND_WHITE;
     this->animationMode = ANIMATION_MODE_NONE;
+
+	if (!this->defaultDisplay)
+		this->defaultDisplay = this;
     
-    uBit.flags |= MICROBIT_FLAG_DISPLAY_RUNNING;
+    status |= MICROBIT_COMPONENT_RUNNING;
 }
 
 /**
@@ -55,7 +58,7 @@ MicroBitDisplay::MicroBitDisplay(uint16_t id, uint8_t x, uint8_t y) :
   */   
 void MicroBitDisplay::systemTick()
 {   
-    if(!(uBit.flags & MICROBIT_FLAG_DISPLAY_RUNNING))
+    if(!(status & MICROBIT_COMPONENT_RUNNING))
         return;
         
     // Move on to the next row. 
@@ -927,10 +930,10 @@ void MicroBitDisplay::rotateTo(DisplayRotation rotation)
   */
 void MicroBitDisplay::enable()
 {
-    if(!(uBit.flags & MICROBIT_FLAG_DISPLAY_RUNNING))
+    if(!(status & MICROBIT_COMPONENT_RUNNING))
     {
         setBrightness(brightness);
-        uBit.flags |= MICROBIT_FLAG_DISPLAY_RUNNING;            //set the display running flag
+    	status |= MICROBIT_COMPONENT_RUNNING;
     }
 }
     
@@ -945,10 +948,8 @@ void MicroBitDisplay::enable()
   */
 void MicroBitDisplay::disable()
 {
-    if(uBit.flags & MICROBIT_FLAG_DISPLAY_RUNNING)
-    {
-        uBit.flags &= ~MICROBIT_FLAG_DISPLAY_RUNNING;           //unset the display running flag
-    }   
+    if(status & MICROBIT_COMPONENT_RUNNING)
+        status &= ~MICROBIT_COMPONENT_RUNNING;           //unset the display running flag
 }
 
 /**
@@ -966,6 +967,21 @@ void MicroBitDisplay::clear()
 }
 
 /**
+  * Displays "=(" and an accompanying status code on the default display.
+  * @param statusCode the appropriate status code - 0 means no code will be displayed. Status codes must be in the range 0-255.
+  *
+  * Example:
+  * @code 
+  * uBit.display.error(20);
+  * @endcode
+  */
+void MicroBitDisplay::panic(int statusCode)
+{
+	if(MicroBitDisplay::defaultDisplay)
+		defaultDisplay->error(statusCode);
+
+}
+/**
   * Displays "=(" and an accompanying status code infinitely.
   * @param statusCode the appropriate status code - 0 means no code will be displayed. Status codes must be in the range 0-255.
   *
@@ -976,15 +992,14 @@ void MicroBitDisplay::clear()
   */
 void MicroBitDisplay::error(int statusCode)
 {   
-    extern InterruptIn resetButton;
+    DigitalIn resetButton(MICROBIT_PIN_BUTTON_RESET);
+    resetButton.mode(PullUp);
 
     __disable_irq(); //stop ALL interrupts
 
     if(statusCode < 0 || statusCode > 255)
         statusCode = 0;
 
-    disable(); //relinquish PWMOut's control
-    
     uint8_t strobeRow = 0;
     uint8_t strobeBitMsk = 0x20;
     
@@ -1034,10 +1049,8 @@ void MicroBitDisplay::error(int statusCode)
                 nrf_gpio_port_write(NRF_GPIO_PORT_SELECT_PORT0, ~coldata<<4 & 0xF0); //set port 0 4-7
                 nrf_gpio_port_write(NRF_GPIO_PORT_SELECT_PORT1, strobeBitMsk | (~coldata>>4 & 0x1F)); //set port 1 8-12
             
-                //set i to an obscene number.
-                i = 1000;
-                
                 //burn cycles
+                i = 1000;
                 while(i>0)
                 {
                     // Check if the reset button has been pressed. Interrupts are disabled, so the normal method can't be relied upon...
@@ -1062,7 +1075,7 @@ void MicroBitDisplay::error(int statusCode)
   */
 void MicroBitDisplay::setFont(MicroBitFont font)
 {
-    this->font = font;
+	MicroBitFont::setSystemFont(font);
 }
 
 /**
@@ -1070,7 +1083,7 @@ void MicroBitDisplay::setFont(MicroBitFont font)
   */
 MicroBitFont MicroBitDisplay::getFont()
 {
-    return this->font;
+	return MicroBitFont::getSystemFont();
 }
 
 /**

@@ -205,6 +205,23 @@
 #ifndef MICROBIT_BLE_MAXIMUM_SCROLLTEXT
 #define MICROBIT_BLE_MAXIMUM_SCROLLTEXT     20
 #endif
+
+// Defines the model of this device, as advertised over BLE.
+#ifndef MICROBIT_BLE_MODEL
+#define MICROBIT_BLE_MODEL					"BBC micro:bit"
+#endif
+
+// Defines the manufacturer of this device, as advertised over BLE.
+#ifndef MICROBIT_BLE_MANUFACTURER
+#define MICROBIT_BLE_MANUFACTURER			"The Cast of W1A"
+#endif
+
+// Defines the hardware version of this device, as advertised over BLE.
+#ifndef MICROBIT_BLE_HARDWARE_VERSION
+#define MICROBIT_BLE_HARDWARE_VERSION		"1.0"
+#endif
+
+
 //
 // Accelerometer options
 //
