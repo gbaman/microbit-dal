@@ -35,6 +35,8 @@ MicroBitCompass::MicroBitCompass(uint16_t id, uint16_t address, MicroBitI2C& _i2
     
     status &= ~MICROBIT_COMPASS_STATUS_CALIBRATED;
     
+	fiber_add_idle_component(this);
+
     // Indicate that we're up and running.
     status |= MICROBIT_COMPONENT_RUNNING;
 }
