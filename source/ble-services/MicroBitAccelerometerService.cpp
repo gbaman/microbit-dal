@@ -8,6 +8,8 @@
 
 #include "MicroBitAccelerometerService.h"
 
+GattAttribute::Handle_t accelerometerDataCharacteristicHandleGlobal;
+
 /**
   * Constructor. 
   * Create a representation of the AccelerometerService
@@ -40,6 +42,7 @@ MicroBitAccelerometerService::MicroBitAccelerometerService(BLEDevice &_ble) :
     ble.addService(service);
 
     accelerometerDataCharacteristicHandle = accelerometerDataCharacteristic.getValueHandle();
+    accelerometerDataCharacteristicHandleGlobal = accelerometerDataCharacteristic.getValueHandle();
     accelerometerPeriodCharacteristicHandle = accelerometerPeriodCharacteristic.getValueHandle();
 
     ble.gattServer().write(accelerometerDataCharacteristicHandle,(uint8_t *)accelerometerDataCharacteristicBuffer, sizeof(accelerometerDataCharacteristicBuffer));

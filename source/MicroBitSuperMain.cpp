@@ -14,7 +14,6 @@ int main()
 #if CONFIG_ENABLED(MICROBIT_DBG)
 
     // For diagnostics. Gives time to open the console window. :-) 
-    uBit.serial.baud(115200);
     for (int i=3; i>0; i--)
     {
         uBit.serial.printf("=== SUPERMAIN: Starting in %d ===\n", i);
@@ -22,17 +21,20 @@ int main()
     }
 
     uBit.serial.printf("micro:bit runtime DAL version %s\n", MICROBIT_DAL_VERSION);
-
 #endif    
 
     // Bring up our nested heap allocator.
     microbit_heap_init();
 
     // Bring up fiber scheduler
+    uBit.serial.printf("Sched init\n");
     scheduler_init();
+    uBit.serial.printf("Sched init done\n");
     
     // Bring up random number generator, BLE, display and system timers.    
+    uBit.serial.printf("uBit init\n");
     uBit.init();
+    uBit.serial.printf("uBit init done\n");
 
     // Provide time for all threaded initialisers to complete.
     uBit.sleep(100);
@@ -58,6 +60,7 @@ int main()
     }
 #endif
        
+    uBit.serial.printf("app_main\n");
     app_main();
 
     // If app_main exits, there may still be other fibers running, registered event handlers etc.

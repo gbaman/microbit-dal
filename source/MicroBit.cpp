@@ -267,23 +267,37 @@ void MicroBit::seedRandom()
   * Periodic callback. Used by MicroBitDisplay, FiberScheduler and buttons.
   */
 void MicroBit::systemTick()
-{   
-    // Scheduler callback. We do this here just as a single timer is more efficient. :-)
-    if (uBit.flags & MICROBIT_FLAG_SCHEDULER_RUNNING)
-        scheduler_tick();  
+{  
+
+    if (flags & MICROBIT_FLAG_NO_ISR)
+	    return;
+
+	if (!(flags & MICROBIT_FLAG_NO_ISR_FIBER))
+	{
+
+		// Scheduler callback. We do this here just as a single timer is more efficient. :-)
+		if (uBit.flags & MICROBIT_FLAG_SCHEDULER_RUNNING)
+			scheduler_tick();  
+	}
     
-    //work out if any idle components need processing, if so prioritise the idle thread
-    for(int i = 0; i < MICROBIT_IDLE_COMPONENTS; i++)
-        if(idleThreadComponents[i] != NULL && idleThreadComponents[i]->isIdleCallbackNeeded())
-        {
-            fiber_flags |= MICROBIT_FLAG_DATA_READY;
-            break;
-        }
-        
-    //update any components in the systemComponents array
-    for(int i = 0; i < MICROBIT_SYSTEM_COMPONENTS; i++)
-        if(systemTickComponents[i] != NULL)
-            systemTickComponents[i]->systemTick();
+	if (!(flags & MICROBIT_FLAG_NO_ISR_ISDATA))
+	{
+		//work out if any idle components need processing, if so prioritise the idle thread
+		for(int i = 0; i < MICROBIT_IDLE_COMPONENTS; i++)
+			if(idleThreadComponents[i] != NULL && idleThreadComponents[i]->isIdleCallbackNeeded())
+			{
+				fiber_flags |= MICROBIT_FLAG_DATA_READY;
+				break;
+			}
+	}
+
+	if (!(flags & MICROBIT_FLAG_NO_ISR_APP))
+	{
+		//update any components in the systemComponents array
+		for(int i = 0; i < MICROBIT_SYSTEM_COMPONENTS; i++)
+			if(systemTickComponents[i] != NULL)
+				systemTickComponents[i]->systemTick();
+	}
 }
 
 /**

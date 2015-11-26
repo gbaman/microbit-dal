@@ -3,6 +3,8 @@
 
 #include "MicroBit.h"
 
+extern GattAttribute::Handle_t accelerometerDataCharacteristicHandleGlobal;
+
 // UUIDs for our service and characteristics
 extern const uint8_t  MicroBitAccelerometerServiceUUID[];
 extern const uint8_t  MicroBitAccelerometerServiceDataUUID[];

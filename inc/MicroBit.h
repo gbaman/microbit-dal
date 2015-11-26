@@ -40,6 +40,11 @@
 #define MICROBIT_FLAG_DISPLAY_RUNNING           0x00000004
 #define MICROBIT_FLAG_COMPASS_RUNNING           0x00000008
 
+#define MICROBIT_FLAG_NO_ISR		        0x00000010
+#define MICROBIT_FLAG_NO_ISR_FIBER	        0x00000020
+#define MICROBIT_FLAG_NO_ISR_ISDATA	        0x00000040
+#define MICROBIT_FLAG_NO_ISR_APP	        0x00000080
+
 // MicroBit naming constants
 #define MICROBIT_NAME_LENGTH                    5
 #define MICROBIT_NAME_CODE_LETTERS              5
