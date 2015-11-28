@@ -270,7 +270,16 @@ void MicroBit::systemTick()
 {  
 
     if (flags & MICROBIT_FLAG_NO_ISR)
+    {
+	    /*
+	    int i = (int) __get_IPSR();
+	    uBit.serial.printf("IPSR: %d\n", i);
+
+	    i = (int) __get_MSP();
+	    uBit.serial.printf("MSP: 0x%8x\n", i);
+	    */
 	    return;
+    }
 
 	if (!(flags & MICROBIT_FLAG_NO_ISR_FIBER))
 	{

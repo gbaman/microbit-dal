@@ -119,7 +119,7 @@ void MicroBitMessageBus::queueEvent(MicroBitEvent &evt)
     MicroBitEventQueueItem *item = new MicroBitEventQueueItem(evt);
 
     // The queue was empty when we entered this function, so queue our event at the start of the queue.
-    __disable_irq();
+    __DISABLE_IRQ();
 
     if (prev == NULL)
     {
@@ -137,7 +137,7 @@ void MicroBitMessageBus::queueEvent(MicroBitEvent &evt)
 
     queueLength++;
 
-    __enable_irq();
+    __ENABLE_IRQ();
 }
 
 /**
@@ -150,7 +150,7 @@ MicroBitEventQueueItem* MicroBitMessageBus::dequeueEvent()
 {
     MicroBitEventQueueItem *item = NULL;
 
-    __disable_irq();
+    __DISABLE_IRQ();
  
     if (evt_queue_head != NULL)
     { 
@@ -163,7 +163,7 @@ MicroBitEventQueueItem* MicroBitMessageBus::dequeueEvent()
         queueLength--;
     }
     
-    __enable_irq();
+    __ENABLE_IRQ();
 
 
     return item;

@@ -7,6 +7,9 @@
 
 #include "ErrorNo.h"
 
+#define __DISABLE_IRQ() 	while(0)
+#define __ENABLE_IRQ()		while(0)
+
 #define PI 3.14159265359
 
 /**

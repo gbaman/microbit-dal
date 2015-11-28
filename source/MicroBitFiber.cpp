@@ -47,7 +47,7 @@ uint8_t fiber_flags = 0;
   */
 void queue_fiber(Fiber *f, Fiber **queue)
 {
-    __disable_irq();
+    __DISABLE_IRQ();
 
     // Record which queue this fiber is on.
     f->queue = queue;
@@ -74,7 +74,7 @@ void queue_fiber(Fiber *f, Fiber **queue)
         f->next = NULL;
     }
 
-    __enable_irq();
+    __ENABLE_IRQ();
 }
 
 /**
@@ -88,7 +88,7 @@ void dequeue_fiber(Fiber *f)
         return;
 
     // Remove this fiber fromm whichever queue it is on.    
-    __disable_irq();
+    __DISABLE_IRQ();
     
     if (f->prev != NULL)
         f->prev->next = f->next;
@@ -102,7 +102,7 @@ void dequeue_fiber(Fiber *f)
     f->prev = NULL;
     f->queue = NULL;
     
-    __enable_irq();
+    __ENABLE_IRQ();
 
 }
 
@@ -113,7 +113,7 @@ Fiber *getFiberContext()
 {
     Fiber *f;
     
-    __disable_irq();
+    __DISABLE_IRQ();
         
     if (fiberPool != NULL)
     {
@@ -123,7 +123,7 @@ Fiber *getFiberContext()
     }
     else
     {
-        __enable_irq();
+        __ENABLE_IRQ();
         
         f = new Fiber();
         

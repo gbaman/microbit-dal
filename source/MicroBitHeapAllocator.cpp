@@ -71,7 +71,7 @@ void microbit_heap_print(HeapDefinition &heap)
     uBit.serial.printf("heap_size  : %d\n", (int)heap.heap_end - (int)heap.heap_start);
 
 	// Disable IRQ temporarily to ensure no race conditions!
-    __disable_irq();
+    __DISABLE_IRQ();
 
 	block = heap.heap_start;
 	while (block < heap.heap_end)
@@ -93,7 +93,7 @@ void microbit_heap_print(HeapDefinition &heap)
     }
 
 	// Enable Interrupts
-    __enable_irq();
+    __ENABLE_IRQ();
 
     uBit.serial.printf("\n");
 
@@ -199,24 +199,24 @@ microbit_heap_init()
     int result;
 
 	// Disable IRQ temporarily to ensure no race conditions!
-    __disable_irq();
+    __DISABLE_IRQ();
 
     result = microbit_create_nested_heap(heap[0]);
     if (result != MICROBIT_OK)
     {
-        __enable_irq();
+        __ENABLE_IRQ();
         return MICROBIT_NO_RESOURCES;
     }
 
     result = microbit_create_sd_heap(heap[1]);
     if (result != MICROBIT_OK)
     {
-        __enable_irq();
+        __ENABLE_IRQ();
         return MICROBIT_NO_RESOURCES;
     }
 
 	// Enable Interrupts
-    __enable_irq();
+    __ENABLE_IRQ();
 
 #if CONFIG_ENABLED(MICROBIT_DBG) && CONFIG_ENABLED(MICROBIT_HEAP_DBG)
     microbit_heap_print();
@@ -245,7 +245,7 @@ void *microbit_malloc(size_t size, HeapDefinition &heap)
 	blocksNeeded++;
 	
 	// Disable IRQ temporarily to ensure no race conditions!
-    __disable_irq();
+    __DISABLE_IRQ();
 
 	// We implement a first fit algorithm with cache to handle rapid churn...
     // We also defragment free blocks as we search, to optimise this and future searches.
@@ -288,7 +288,7 @@ void *microbit_malloc(size_t size, HeapDefinition &heap)
 	// We're full!
 	if (block >= heap.heap_end)
     {
-        __enable_irq();
+        __ENABLE_IRQ();
         return NULL;
     }
 
@@ -309,7 +309,7 @@ void *microbit_malloc(size_t size, HeapDefinition &heap)
 	}
 
 	// Enable Interrupts
-    __enable_irq();
+    __ENABLE_IRQ();
 
 	return block+1;
 }

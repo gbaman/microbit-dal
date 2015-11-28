@@ -978,7 +978,7 @@ void MicroBitDisplay::error(int statusCode)
 {   
     extern InterruptIn resetButton;
 
-    __disable_irq(); //stop ALL interrupts
+    __DISABLE_IRQ(); //stop ALL interrupts
 
     if(statusCode < 0 || statusCode > 255)
         statusCode = 0;

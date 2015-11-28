@@ -14,7 +14,7 @@
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #endif
 #include "ble/BLE.h"
-
+#include "nrf_soc.h"
 /* 
  * Return to our predefined compiler settings.
  */
